@@ -1,5 +1,5 @@
 import { Collector } from "./collector.ts";
-import { Labels, Metric, Observe } from "./metric.ts";
+import { Labels, Metric, Observe, Output } from "./metric.ts";
 import { Registry } from "./registry.ts";
 
 export class Histogram extends Metric implements Observe {
@@ -15,14 +15,14 @@ export class Histogram extends Metric implements Observe {
       help: string;
       labels?: string[];
       buckets: number[];
-      registry?: Registry[];
+      registries?: Registry[];
     },
   ): Histogram {
     const collector = new Collector(
       config.name,
       config.help,
       "histogram",
-      config.registry,
+      config.registries,
     );
 
     const labels = config.labels || [];
@@ -51,43 +51,45 @@ export class Histogram extends Metric implements Observe {
     return `${this.collector.name}${labels}`;
   }
 
-  expose(): string | undefined {
+  outputs(): Output[] | undefined {
     if (this.count == 0) {
       return undefined;
     }
 
-    let text = "";
+    const output: Output[] = [];
 
     for (let i = 0; i < this.buckets.length; i++) {
-      let labels = this.getLabelsAsString({ le: `${this.buckets[i]}` });
-      labels = labels.replace("Infinity", "+Inf");
-      text += `${this.collector.name}_bucket${labels} ${this.values[i]}\n`;
+      const labels = this.getLabels({ le: `${this.buckets[i]}` });
+
+      if (labels["le"] === "Infinity") {
+        labels["le"] = "+Inf";
+      }
+
+      output.push([`${this.collector.name}_bucket`, labels, this.values[i]]);
     }
 
-    const labels = this.getLabelsAsString();
-    text += `${this.collector.name}_sum${labels} ${this.sum}\n`;
-    text += `${this.collector.name}_count${labels} ${this.count}`;
-    return text;
+    const labels = this.getLabels();
+
+    output.push([`${this.collector.name}_sum`, labels, this.sum]);
+    output.push([`${this.collector.name}_count`, labels, this.count]);
+
+    return output;
   }
 
   labels(labels: Labels): Observe {
-    let child = new Histogram(this.collector, this.labelNames, this.buckets);
+    const child = new Histogram(this.collector, this.labelNames, this.buckets);
 
     for (const key of Object.keys(labels)) {
       const index = child.labelNames.indexOf(key);
+
       if (index === -1) {
         throw new Error(`label with name ${key} not defined`);
       }
+
       child.labelValues[index] = labels[key];
     }
 
-    child = child.collector.getOrSetMetric(child) as Histogram;
-
-    return {
-      observe: (n) => {
-        child.observe(n);
-      },
-    };
+    return child.collector.getOrSetMetric(child);
   }
 
   observe(n: number) {

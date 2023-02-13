@@ -1,4 +1,4 @@
-import { Metric } from "./metric.ts";
+import { Metric, Output } from "./metric.ts";
 
 export const test = Deno.test;
 
@@ -22,6 +22,10 @@ export class MetricMock extends Metric {
 
   get description(): string {
     return this.labelNames.concat(this.labelValues).toString();
+  }
+
+  outputs(): Output[] {
+    return [["mock", this.getLabels(), 1]];
   }
 
   expose(): string {

@@ -1,5 +1,5 @@
 import { Collector } from "./collector.ts";
-import { Labels, Metric, Observe } from "./metric.ts";
+import { Labels, Metric, Observe, Output } from "./metric.ts";
 import { Registry } from "./registry.ts";
 
 class Sample {
@@ -35,14 +35,14 @@ export class Summary extends Metric implements Observe {
       quantiles?: number[];
       maxAge?: number;
       ageBuckets?: number;
-      registry?: Registry[];
+      registries?: Registry[];
     },
   ): Summary {
     const collector = new Collector(
       config.name,
       config.help,
       "summary",
-      config.registry,
+      config.registries,
     );
 
     const labels = config.labels || [];
@@ -105,52 +105,51 @@ export class Summary extends Metric implements Observe {
     }
   }
 
-  expose(): string | undefined {
+  outputs(): Output[] | undefined {
     if (this.values.length === 0) {
       return undefined;
     }
 
-    let text = "";
-
     this.clean();
+
+    const output: Output[] = [];
+
     const sorted = this.values.slice().sort((a, b) =>
       a.getValue() - b.getValue()
     );
 
     for (const p of this.quantiles) {
-      const labels = this.getLabelsAsString({ quantile: p.toString() });
+      const labels = this.getLabels({ quantile: p.toString() });
       let index = Math.ceil(p * sorted.length);
       index = index == 0 ? 0 : index - 1;
       const value = sorted[index].getValue();
-      text += `${this.collector.name}${labels} ${value}\n`;
+
+      output.push([this.collector.name, labels, value]);
     }
 
-    const labels = this.getLabelsAsString();
+    const labels = this.getLabels();
     const sum = this.values.reduce((sum, v) => sum + v.getValue(), 0);
-    text += `${this.collector.name}_sum${labels} ${sum}\n`;
-    text += `${this.collector.name}_count${labels} ${sorted.length}`;
 
-    return text;
+    output.push([`${this.collector.name}_sum`, labels, sum]);
+    output.push([`${this.collector.name}_count`, labels, sorted.length]);
+
+    return output;
   }
 
   labels(labels: Labels): Observe {
-    let child = new Summary(this.collector, this.labelNames, this.quantiles);
+    const child = new Summary(this.collector, this.labelNames, this.quantiles);
 
     for (const key of Object.keys(labels)) {
       const index = child.labelNames.indexOf(key);
+
       if (index === -1) {
         throw new Error(`label with name ${key} not defined`);
       }
+
       child.labelValues[index] = labels[key];
     }
 
-    child = child.collector.getOrSetMetric(child) as Summary;
-
-    return {
-      observe: (n) => {
-        child.observe(n);
-      },
-    };
+    return child.collector.getOrSetMetric(child);
   }
 
   observe(n: number) {

@@ -1,6 +1,7 @@
 import { Collector } from "./collector.ts";
-import { Inc, Labels, Metric, Value } from "./metric.ts";
+import { Inc, Labels, Metric, Output, Value } from "./metric.ts";
 import { Registry } from "./registry.ts";
+
 export class Counter extends Metric implements Inc, Value {
   private collector: Collector;
   private _value?: number;
@@ -10,15 +11,16 @@ export class Counter extends Metric implements Inc, Value {
       name: string;
       help: string;
       labels?: string[];
-      registry?: Registry[];
+      registries?: Registry[];
     },
   ): Counter {
     const collector = new Collector(
       config.name,
       config.help,
       "counter",
-      config.registry,
+      config.registries,
     );
+
     const labels = config.labels || [];
     return new Counter(collector, labels);
   }
@@ -38,42 +40,40 @@ export class Counter extends Metric implements Inc, Value {
     return `${this.collector.name}${labels}`;
   }
 
-  expose(): string | undefined {
+  outputs(): Output[] | undefined {
     if (this._value !== undefined) {
-      return `${this.description} ${this._value}`;
+      return [[this.collector.name, this.getLabels(), this._value]];
     }
+
     return undefined;
   }
 
-  labels(labels: Labels): Inc & Value {
-    let child = new Counter(this.collector, this.labelNames);
+  labels(labels: Labels): Counter {
+    const child = new Counter(this.collector, this.labelNames);
+
     for (const key of Object.keys(labels)) {
       const index = child.labelNames.indexOf(key);
+
       if (index === -1) {
         throw new Error(`label with name ${key} not defined`);
       }
+
       child.labelValues[index] = labels[key];
     }
-    child = child.collector.getOrSetMetric(child) as Counter;
 
-    return {
-      // deno-lint-ignore no-inferrable-types
-      inc: (n: number = 1) => {
-        child.inc(n);
-      },
-      value: () => {
-        return child._value;
-      },
-    };
+    return child.collector.getOrSetMetric(child);
   }
+
   // deno-lint-ignore no-inferrable-types
   inc(n: number = 1) {
     if (n < 0) {
       throw new Error("it is not possible to deacrease a counter");
     }
+
     if (this._value === undefined) {
       this._value = 0;
     }
+
     this._value += n;
   }
 

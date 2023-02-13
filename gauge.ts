@@ -1,5 +1,5 @@
 import { Collector } from "./collector.ts";
-import { Dec, Inc, Labels, Metric, Set, Value } from "./metric.ts";
+import { Dec, Inc, Labels, Metric, Output, Value } from "./metric.ts";
 import { Registry } from "./registry.ts";
 
 export class Gauge extends Metric implements Inc, Dec, Value {
@@ -11,14 +11,14 @@ export class Gauge extends Metric implements Inc, Dec, Value {
       name: string;
       help: string;
       labels?: string[];
-      registry?: Registry[];
+      registries?: Registry[];
     },
   ): Gauge {
     const collector = new Collector(
       config.name,
       config.help,
       "gauge",
-      config.registry,
+      config.registries || [],
     );
     const labels = config.labels || [];
     return new Gauge(collector, labels);
@@ -39,41 +39,30 @@ export class Gauge extends Metric implements Inc, Dec, Value {
     return `${this.collector.name}${labels}`;
   }
 
-  expose(): string | undefined {
+  outputs(): Output[] | undefined {
     if (this._value !== undefined) {
-      return `${this.description} ${this._value}`;
+      return [[this.collector.name, this.getLabels(), this._value]];
     }
+
     return undefined;
   }
 
-  labels(labels: Labels): Inc & Dec & Set & Value {
-    let child = new Gauge(this.collector, this.labelNames);
+  labels(labels: Labels): Gauge {
+    const child = new Gauge(this.collector, this.labelNames);
+
     for (const key of Object.keys(labels)) {
       const index = child.labelNames.indexOf(key);
+
       if (index === -1) {
         throw new Error(`label with name ${key} not defined`);
       }
+
       child.labelValues[index] = labels[key];
     }
-    child = child.collector.getOrSetMetric(child) as Gauge;
 
-    return {
-      // deno-lint-ignore no-inferrable-types
-      inc: (n: number = 1) => {
-        child.inc(n);
-      },
-      // deno-lint-ignore no-inferrable-types
-      dec: (n: number = 1) => {
-        child.dec(n);
-      },
-      set: (n: number) => {
-        child.set(n);
-      },
-      value: () => {
-        return child._value;
-      },
-    };
+    return child.collector.getOrSetMetric(child);
   }
+
   // deno-lint-ignore no-inferrable-types
   inc(n: number = 1) {
     if (this._value === undefined) {
@@ -81,6 +70,7 @@ export class Gauge extends Metric implements Inc, Dec, Value {
     }
     this._value += n;
   }
+
   // deno-lint-ignore no-inferrable-types
   dec(n: number = 1) {
     if (this._value === undefined) {

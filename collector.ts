@@ -42,11 +42,13 @@ export class Collector {
     return [...this.metrics.values()];
   }
 
-  getOrSetMetric(metric: Metric): Metric {
+  getOrSetMetric<M extends Metric>(metric: M): M {
     const saved = this.metrics.get(metric.description);
+
     if (saved !== undefined) {
-      return saved;
+      return saved as M;
     }
+
     this.metrics.set(metric.description, metric);
     return metric;
   }
