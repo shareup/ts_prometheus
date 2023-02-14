@@ -11,7 +11,7 @@ export const rawOutputsExposition: Exposition = (collectors) => {
       const outputs = metric.outputs();
 
       if (outputs) {
-        allOutputs = allOutputs.concat(outputs)
+        allOutputs = allOutputs.concat(outputs);
       }
     }
   }
