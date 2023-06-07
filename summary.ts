@@ -122,7 +122,7 @@ export class Summary extends Metric implements Observe {
       const labels = this.getLabels({ quantile: p.toString() });
       let index = Math.ceil(p * sorted.length);
       index = index == 0 ? 0 : index - 1;
-      const value = sorted[index].getValue();
+      const value = sorted[index]?.getValue();
 
       output.push([this.collector.name, labels, value]);
     }
